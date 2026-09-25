@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daybook — Daily Expense, Budget &amp; Savings Tracker</title>
+
+  <!-- Google Fonts (progressive enhancement only — the app looks and works fine offline too) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- ======================= LOCAL ACCOUNT GATE ======================= -->
+  <section class="auth-shell" id="authSection" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <h1 id="authTitle">Daybook</h1>
+        <p>Keep your budget and expenses in your own profile.</p>
+      </div>
+
+      <div class="auth-tabs" role="tablist" aria-label="Account options">
+        <button type="button" class="auth-tab is-active" id="loginTab" role="tab" aria-selected="true">Log in</button>
+        <button type="button" class="auth-tab" id="registerTab" role="tab" aria-selected="false">Create account</button>
+      </div>
+
+      <form id="loginForm" class="auth-form" novalidate>
+        <div class="field"><label for="loginEmail">Email</label><input type="email" id="loginEmail" autocomplete="email" required></div>
+        <div class="field"><label for="loginPassword">Password</label><input type="password" id="loginPassword" autocomplete="current-password" required></div>
+        <p class="auth-error" id="loginError" role="alert"></p>
+        <button type="submit" class="btn btn-primary">Log in</button>
+      </form>
+
+      <form id="registerForm" class="auth-form" novalidate hidden>
+        <div class="field"><label for="registerName">Full name</label><input type="text" id="registerName" autocomplete="name" maxlength="60" required></div>
+        <div class="field"><label for="registerEmail">Email</label><input type="email" id="registerEmail" autocomplete="email" required></div>
+        <div class="field"><label for="registerPassword">Password</label><input type="password" id="registerPassword" autocomplete="new-password" minlength="6" required></div>
+        <p class="auth-error" id="registerError" role="alert"></p>
+        <button type="submit" class="btn btn-primary">Create account</button>
+      </form>
+      <p class="auth-note">Your account and data are securely saved to your Daybook account.</p>
+    </div>
+  </section>
+
+  <div class="app-shell" id="appShell" hidden>
+
+    <!-- ======================= HEADER ======================= -->
+    <header class="app-header">
+      <div class="header-row"><div><h1>Daybook</h1>
+      <p class="subtitle">Set a budget for any date range, log expenses as they happen, and let your daily limit and savings update themselves.</p>
+      </div><div class="profile-menu"><span id="profileName"></span><button type="button" class="btn btn-ghost btn-small" id="logoutBtn">Log out</button></div></div>
+    </header>
+
+    <main>
+
+      <!-- ======================= SETUP: date range + total budget ======================= -->
+      <section class="card setup-card" id="setupSection" aria-labelledby="setupHeading">
+        <div class="setup-card__head">
+          <h2 id="setupHeading">Your budget plan</h2>
+          <button type="button" class="btn btn-ghost btn-small" id="editPlanBtn" hidden>Edit plan</button>
+        </div>
+
+        <form id="setupForm" class="setup-form" novalidate>
+          <div class="field">
+            <label for="startDateInput">Start date</label>
+            <input type="date" id="startDateInput" name="startDate" required>
+            <span class="field-error" id="startDateError" role="alert"></span>
+          </div>
+
+          <div class="field">
+            <label for="endDateInput">End date</label>
+            <input type="date" id="endDateInput" name="endDate" required>
+            <span class="field-error" id="endDateError" role="alert"></span>
+          </div>
+
+          <div class="field">
+            <label for="budgetInput">Total budget (৳)</label>
+            <input type="number" id="budgetInput" name="budget" min="0.01" step="0.01" placeholder="e.g. 6000" required>
+            <span class="field-error" id="budgetError" role="alert"></span>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="setupSubmitBtn">Save plan</button>
+        </form>
+
+        <p class="setup-summary" id="setupSummary" hidden></p>
+      </section>
+
+      <!-- ======================= WARNING BANNER ======================= -->
+      <div class="warning-banner" id="warningBanner" role="alert" hidden></div>
+
+      <!-- ======================= STATS ======================= -->
+      <section class="stats-grid" id="statsGrid" aria-label="Budget overview" hidden>
+
+        <div class="stat-card stat-card--teal">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="6" width="18" height="13" rx="2"></rect>
+              <path d="M3 10h18"></path>
+              <circle cx="16.5" cy="14" r="1.1" fill="currentColor" stroke="none"></circle>
+            </svg>
+          </span>
+          <span class="stat-card__label">Total budget</span>
+          <span class="stat-card__value" id="statTotalBudget">৳0.00</span>
+        </div>
+
+        <div class="stat-card stat-card--plum">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3h12v17l-2.5-1.5L13 20l-2.5-1.5L8 20l-2-1.5z"></path>
+              <path d="M9 8h6M9 12h6M9 16h3"></path>
+            </svg>
+          </span>
+          <span class="stat-card__label">Total spent</span>
+          <span class="stat-card__value" id="statTotalSpent">৳0.00</span>
+        </div>
+
+        <div class="stat-card stat-card--slate">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"></path>
+              <path d="M9 12l2 2 4-4"></path>
+            </svg>
+          </span>
+          <span class="stat-card__label">Remaining budget</span>
+          <span class="stat-card__value" id="statRemaining">৳0.00</span>
+        </div>
+
+        <div class="stat-card stat-card--amber">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.5"></circle>
+              <path d="M12 7.5V12l3 2"></path>
+            </svg>
+          </span>
+          <span class="stat-card__label">Daily limit</span>
+          <span class="stat-card__value" id="statDailyLimit">৳0.00</span>
+          <span class="stat-card__helper" id="statDailyLimitHelper"></span>
+        </div>
+
+        <div class="stat-card stat-card--green" id="savingsCard">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 16 10 10 14 13 20 6"></polyline>
+              <polyline points="14 6 20 6 20 12"></polyline>
+            </svg>
+          </span>
+          <span class="stat-card__label">Savings</span>
+          <span class="stat-card__value" id="statSavings">৳0.00</span>
+        </div>
+
+        <div class="stat-card stat-card--blue">
+          <span class="stat-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v18M16 7.5c0-1.4-1.8-2.5-4-2.5s-4 1.1-4 2.8c0 4.1 8 1.9 8 6.2 0 1.7-1.8 3-4 3s-4-1.1-4-2.5"></path>
+            </svg>
+          </span>
+          <span class="stat-card__label">Total earned</span>
+          <span class="stat-card__value" id="statTotalEarned">৳0.00</span>
+        </div>
+
+      </section>
+
+      <!-- ======================= PROGRESS ======================= -->
+      <section class="card progress-section" id="progressSection" hidden aria-label="Progress">
+        <div class="progress-block">
+          <div class="progress-label-row">
+            <span>Budget used</span>
+            <span id="budgetProgressText">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="budgetProgressFill"></div>
+          </div>
+        </div>
+
+        <div class="progress-block">
+          <div class="progress-label-row">
+            <span>Savings health</span>
+            <span id="savingsProgressText">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill savings-fill" id="savingsProgressFill"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================= ADD EXPENSE ======================= -->
+      <section class="card expense-form-card" id="expenseFormSection" hidden aria-labelledby="expenseFormHeading">
+        <h2 id="expenseFormHeading">Log an expense</h2>
+        <form id="expenseForm" class="expense-form" novalidate>
+          <div class="field">
+            <label for="expenseDateInput">Date</label>
+            <input type="date" id="expenseDateInput" name="expenseDate" required>
+            <span class="field-error" id="expenseDateError" role="alert"></span>
+          </div>
+
+          <div class="field field--grow">
+            <label for="expenseNameInput">Expense name</label>
+            <input type="text" id="expenseNameInput" name="expenseName" placeholder="e.g. Lunch" maxlength="60" required>
+            <span class="field-error" id="expenseNameError" role="alert"></span>
+          </div>
+
+          <div class="field">
+            <label for="expensePriceInput">Price (৳)</label>
+            <input type="number" id="expensePriceInput" name="expensePrice" min="0.01" step="0.01" placeholder="e.g. 150" required>
+            <span class="field-error" id="expensePriceError" role="alert"></span>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="addExpenseBtn">Add expense</button>
+        </form>
+        <p class="empty-state" id="expenseFormNote" hidden></p>
+      </section>
+
+      <!-- ======================= ADD EARNING ======================= -->
+      <section class="card expense-form-card" id="earningFormSection" hidden aria-labelledby="earningFormHeading">
+        <h2 id="earningFormHeading">Log an earning</h2>
+        <form id="earningForm" class="expense-form" novalidate>
+          <div class="field">
+            <label for="earningDateInput">Date</label>
+            <input type="date" id="earningDateInput" required>
+            <span class="field-error" id="earningDateError" role="alert"></span>
+          </div>
+          <div class="field field--grow">
+            <label for="earningNameInput">Work name</label>
+            <input type="text" id="earningNameInput" placeholder="e.g. Graphic design job" maxlength="60" required>
+            <span class="field-error" id="earningNameError" role="alert"></span>
+          </div>
+          <div class="field">
+            <label for="earningAmountInput">Amount (৳)</label>
+            <input type="number" id="earningAmountInput" min="0.01" step="0.01" placeholder="e.g. 1500" required>
+            <span class="field-error" id="earningAmountError" role="alert"></span>
+          </div>
+          <button type="submit" class="btn btn-primary">Add earning</button>
+        </form>
+      </section>
+
+      <!-- ======================= EARNINGS HISTORY ======================= -->
+      <section class="card history-card" id="earningsSection" hidden aria-labelledby="earningsHeading">
+        <div class="history-header"><h2 id="earningsHeading">Earnings history</h2></div>
+        <div class="history-list" id="earningsList"></div>
+        <p class="empty-state" id="earningsEmptyState" hidden>No earnings logged yet.</p>
+      </section>
+
+      <!-- ======================= HISTORY ======================= -->
+      <section class="card history-card" id="historySection" hidden aria-labelledby="historyHeading">
+        <div class="history-header">
+          <h2 id="historyHeading">Expense history</h2>
+          <div class="history-filter">
+            <label for="filterDateSelect">View a date</label>
+            <select id="filterDateSelect">
+              <option value="">All dates</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-small" id="clearFilterBtn" hidden>Clear</button>
+          </div>
+        </div>
+
+        <div class="history-list" id="historyList"></div>
+        <p class="empty-state" id="historyEmptyState" hidden>No expenses logged yet — add your first one above.</p>
+        <p class="empty-state" id="filterEmptyState" hidden>No expenses on this date.</p>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <button type="button" class="btn btn-danger-outline" id="resetBtn">Reset all data</button>
+      <p class="footer-note">Your account, budget, expenses, and earnings are securely saved to your Daybook account.</p>
+    </footer>
+
+  </div>
+
+  <!-- ======================= RESET CONFIRM MODAL ======================= -->
+  <div class="modal-overlay" id="confirmModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+      <h3 id="confirmModalTitle">Reset all data?</h3>
+      <p>This clears your budget plan and every logged expense. This can't be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="confirmCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmResetBtn">Yes, reset everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= DELETE CONFIRM MODAL ======================= -->
+  <div class="modal-overlay" id="deleteModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+      <h3 id="deleteModalTitle">Delete this expense?</h3>
+      <p id="deleteModalMessage">This can't be undone.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="deleteCancelBtn">Cancel</button>
+        <button type="button" class="btn btn-danger" id="deleteConfirmBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= EDIT EXPENSE MODAL ======================= -->
+  <div class="modal-overlay" id="editModalOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+      <h3 id="editModalTitle">Edit expense</h3>
+      <form id="editExpenseForm" novalidate>
+        <input type="hidden" id="editExpenseId">
+
+        <div class="field">
+          <label for="editDateInput">Date</label>
+          <input type="date" id="editDateInput" required>
+          <span class="field-error" id="editDateError" role="alert"></span>
+        </div>
+
+        <div class="field">
+          <label for="editNameInput">Expense name</label>
+          <input type="text" id="editNameInput" maxlength="60" required>
+          <span class="field-error" id="editNameError" role="alert"></span>
+        </div>
+
+        <div class="field">
+          <label for="editPriceInput">Price (৳)</label>
+          <input type="number" id="editPriceInput" min="0.01" step="0.01" required>
+          <span class="field-error" id="editPriceError" role="alert"></span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="editCancelBtn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Small live region used for polite screen-reader announcements (e.g. "Expense added") -->
+  <div id="liveRegion" class="sr-only" aria-live="polite"></div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
