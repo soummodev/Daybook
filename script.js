@@ -287,15 +287,16 @@
   function computeStats() {
     var stats = {
       totalBudget: state.totalBudget || 0,
-       totalSpent: 0,
-       totalEarned: 0,
+      totalSpent: 0,
+      totalEarned: 0,
       remainingBudget: state.totalBudget || 0,
       dailyLimit: 0,
       savings: 0,
       remainingDays: 0,
       totalDays: 0,
-       dailyLimitsByDate: {}, // date -> the plan's fixed daily limit
+      dailyLimitsByDate: {}, // date -> the plan's daily limit (base + earnings on that date)
       daySpendByDate: {},    // date -> total spent that day
+      dayEarnByDate: {},     // date -> total earned that day
       periodStatus: 'no-plan' // 'no-plan' | 'not-started' | 'active' | 'ended'
     };
 
@@ -305,26 +306,35 @@
     var allDates = getDateRangeArray(state.startDate, state.endDate);
     stats.totalDays = allDates.length;
 
-    // Tally what was actually spent on each date.
+    // Tally what was actually spent and earned on each date.
     state.expenses.forEach(function (exp) {
       stats.daySpendByDate[exp.date] = (stats.daySpendByDate[exp.date] || 0) + exp.price;
     });
+    state.earnings.forEach(function (earn) {
+      stats.dayEarnByDate[earn.date] = (stats.dayEarnByDate[earn.date] || 0) + earn.amount;
+    });
+
     stats.totalSpent = state.expenses.reduce(function (sum, e) { return sum + e.price; }, 0);
     stats.totalEarned = state.earnings.reduce(function (sum, e) { return sum + e.amount; }, 0);
-    stats.remainingBudget = state.totalBudget - stats.totalSpent;
+    stats.remainingBudget = (state.totalBudget + stats.totalEarned) - stats.totalSpent;
 
-    var fixedDailyLimit = state.totalBudget / stats.totalDays;
-    allDates.forEach(function (day) { stats.dailyLimitsByDate[day] = fixedDailyLimit; });
-
-    // Savings only changes after a day is complete. This prevents today's unused
-    // allowance from appearing as savings before the day has actually ended.
+    var baseDailyLimit = state.totalBudget / stats.totalDays;
     allDates.forEach(function (day) {
-      if (day < today) stats.savings += fixedDailyLimit - (stats.daySpendByDate[day] || 0);
+      stats.dailyLimitsByDate[day] = baseDailyLimit + (stats.dayEarnByDate[day] || 0);
     });
+
+    // Savings only changes after a day is complete.
+    allDates.forEach(function (day) {
+      if (day < today) {
+        stats.savings += stats.dailyLimitsByDate[day] - (stats.daySpendByDate[day] || 0);
+      }
+    });
+
+    var todayDailyLimit = baseDailyLimit + (stats.dayEarnByDate[today] || 0);
 
     if (today < state.startDate) {
       stats.periodStatus = 'not-started';
-      stats.dailyLimit = fixedDailyLimit;
+      stats.dailyLimit = baseDailyLimit;
       stats.remainingDays = stats.totalDays;
     } else if (today > state.endDate) {
       stats.periodStatus = 'ended';
@@ -332,7 +342,7 @@
       stats.remainingDays = 0;
     } else {
       stats.periodStatus = 'active';
-      stats.dailyLimit = fixedDailyLimit;
+      stats.dailyLimit = todayDailyLimit;
       stats.remainingDays = stats.totalDays - allDates.indexOf(today);
     }
 
@@ -531,13 +541,14 @@
   }
 
   function renderProgress(stats) {
-    var budgetPct = stats.totalBudget > 0 ? (stats.totalSpent / stats.totalBudget) * 100 : 0;
+    var effectiveBudget = stats.totalBudget + stats.totalEarned;
+    var budgetPct = effectiveBudget > 0 ? (stats.totalSpent / effectiveBudget) * 100 : 0;
     el.budgetProgressFill.style.width = clamp(budgetPct, 0, 100) + '%';
     el.budgetProgressText.textContent = Math.round(budgetPct) + '%';
     el.budgetProgressFill.classList.toggle('is-warning', budgetPct >= 80 && budgetPct < 100);
     el.budgetProgressFill.classList.toggle('is-danger', budgetPct >= 100);
 
-    var savingsPct = stats.totalBudget > 0 ? (stats.savings / stats.totalBudget) * 100 : 0;
+    var savingsPct = effectiveBudget > 0 ? (stats.savings / effectiveBudget) * 100 : 0;
     el.savingsProgressFill.style.width = clamp(Math.abs(savingsPct), 0, 100) + '%';
     el.savingsProgressText.textContent = (savingsPct >= 0 ? '+' : '\u2212') + Math.round(Math.abs(savingsPct)) + '%';
     el.savingsProgressFill.classList.toggle('is-negative', savingsPct < 0);
@@ -571,7 +582,13 @@
 
   function renderEarningForm() {
     if (!hasPlan()) return;
-    if (!el.earningDateInput.value) el.earningDateInput.value = todayStr();
+    var minDate = state.startDate;
+    var maxDate = todayStr() < state.endDate ? todayStr() : state.endDate;
+    el.earningDateInput.min = minDate;
+    el.earningDateInput.max = maxDate;
+    if (!el.earningDateInput.value || el.earningDateInput.value < minDate || el.earningDateInput.value > maxDate) {
+      el.earningDateInput.value = maxDate;
+    }
   }
 
   function renderEarningsHistory() {
@@ -587,7 +604,12 @@
       row.innerHTML =
         '<span class="expense-row__name">' + escapeHtml(earning.name) + '</span>' +
         '<span class="earning-date">' + formatDisplayDate(earning.date) + '</span>' +
-        '<span class="expense-row__price earning-amount">+' + formatMoney(earning.amount) + '</span>';
+        '<span class="expense-row__price earning-amount">+' + formatMoney(earning.amount) + '</span>' +
+        '<span class="expense-row__actions">' +
+          '<button type="button" class="icon-btn icon-btn--danger delete-btn" data-action="delete-earning" data-id="' + earning.id + '" aria-label="Delete ' + escapeHtml(earning.name) + '">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path></svg>' +
+          '</button>' +
+        '</span>';
       el.earningsList.appendChild(row);
     });
   }
@@ -1006,6 +1028,19 @@
     announce('Added earning from ' + earning.name + ', ' + formatMoney(earning.amount) + '.');
     renderAll();
     el.earningNameInput.focus();
+  });
+
+  el.earningsList.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-action="delete-earning"]');
+    if (!btn) return;
+    var id = btn.getAttribute('data-id');
+    if (!id) return;
+    e.preventDefault();
+    e.stopPropagation();
+    state.earnings = state.earnings.filter(function (earn) { return earn.id !== id; });
+    saveState();
+    announce('Earning deleted.');
+    renderAll();
   });
 
   // --- History: edit / delete via event delegation ---
